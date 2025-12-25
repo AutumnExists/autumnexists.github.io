@@ -180,6 +180,10 @@
                 }
             }
         };
+
+        recognition.onstart = () => {
+            debugEl.innerHTML = `> Microphone active`;
+        };
     }
 
     function playClick() {
@@ -298,13 +302,17 @@
         try {
             recognition.start();
             debugEl.innerHTML = `> Starting microphone...`;
+            // Start the game immediately
+            setTimeout(() => {
+                startRound();
+            }, 300);
         } catch (e) {
-            debugEl.innerHTML = `> Microphone starting...`;
+            debugEl.innerHTML = `> Error: ${e.message}`;
+            // Try to start anyway
+            setTimeout(() => {
+                startRound();
+            }, 300);
         }
-        
-        setTimeout(() => {
-            startRound();
-        }, 500);
     };
 </script>
 
