@@ -65,6 +65,7 @@
     
     <br>
     <button id="start-btn">START SYSTEM</button>
+    <button id="mic-test-btn" style="display:none; margin-top:10px; padding:10px 20px; font-size:0.9rem;">TEST MICROPHONE</button>
 </div>
 
 <div id="debug-log">> System Awaiting Signal...</div>
@@ -127,6 +128,7 @@
     const statusEl = document.getElementById('status');
     const debugEl = document.getElementById('debug-log');
     const startBtn = document.getElementById('start-btn');
+    const micTestBtn = document.getElementById('mic-test-btn');
     const gridEl = document.getElementById('word-grid');
     const statsEl = document.getElementById('stats');
 
@@ -305,9 +307,26 @@
         
         if (!recognition) {
             statusEl.innerText = "NO MIC SUPPORT";
-            debugEl.innerHTML = `> Speech recognition not available`;
+            debugEl.innerHTML = `> Speech recognition not available in this browser`;
             return;
         }
+
+        // Show mic test button
+        micTestBtn.style.display = 'inline-block';
+        micTestBtn.onclick = function() {
+            try {
+                recognition.stop();
+                recognition.start();
+                debugEl.innerHTML = `> Restarting microphone... say "TEST"`;
+            } catch(e) {
+                try {
+                    recognition.start();
+                    debugEl.innerHTML = `> Starting microphone... say "TEST"`;
+                } catch(e2) {
+                    debugEl.innerHTML = `> Error: ${e2.message}`;
+                }
+            }
+        };
 
         // Create audio context and resume it (important for mobile)
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -326,14 +345,14 @@
         // Start recognition
         try {
             recognition.start();
-            debugEl.innerHTML = `> Microphone starting...`;
+            debugEl.innerHTML = `> Microphone starting... (may take a moment)`;
         } catch (e) {
-            debugEl.innerHTML = `> Mic error: ${e.message}`;
+            debugEl.innerHTML = `> Mic error: ${e.message} - Try TEST MIC button`;
         }
         
         // Start the game
         setTimeout(() => {
-            debugEl.innerHTML = `> Starting game...`;
+            debugEl.innerHTML = `> Starting game... speak during "SAY IT!" phase`;
             startRound();
         }, 500);
     };
