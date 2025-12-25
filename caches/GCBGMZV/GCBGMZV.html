@@ -2,16 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GCBGMZV</title>
     <style>
         :root { --neon: #00ff41; --bg: #0a0a0a; --dim: #002200; }
         body { 
             background: var(--bg); color: var(--neon); font-family: 'Courier New', monospace; 
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            height: 100vh; margin: 0; overflow: hidden; 
+            min-height: 100vh; margin: 0; overflow: hidden; padding: 10px;
         }
 
-        #container { border: 2px solid var(--neon); padding: 20px; text-align: center; width: 580px; background: #000; box-shadow: 0 0 30px rgba(0,255,65,0.1); }
+        #container { border: 2px solid var(--neon); padding: 20px; text-align: center; max-width: 580px; width: 100%; background: #000; box-shadow: 0 0 30px rgba(0,255,65,0.1); }
 
         .word-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 25px 0; }
         .word-box { 
@@ -121,6 +122,7 @@
     let currentSet = 1, currentRound = 1, beatCount = 0;
     let phase = 'IDLE', targetWords = [];
     let recognizedThisRound = new Set();
+    let recognition = null;
 
     const statusEl = document.getElementById('status');
     const debugEl = document.getElementById('debug-log');
@@ -128,53 +130,57 @@
     const gridEl = document.getElementById('word-grid');
     const statsEl = document.getElementById('stats');
 
-    // SPEECH CONFIG
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    // Check if speech recognition is available
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+        statusEl.innerText = "SPEECH NOT SUPPORTED";
+        debugEl.innerHTML = "> Your browser doesn't support speech recognition";
+        startBtn.disabled = true;
+    } else {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
 
-    // Handle recognition errors and restarts
-    recognition.onerror = (event) => {
-        debugEl.innerHTML = `> ERROR: ${event.error}`;
-        if (event.error === 'no-speech' || event.error === 'audio-capture') {
-            if (isRunning) {
-                setTimeout(() => recognition.start(), 100);
+        recognition.onresult = (event) => {
+            let transcript = "";
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript.toUpperCase();
             }
-        }
-    };
+            
+            debugEl.innerHTML = `> ANALYZING: ${transcript}`;
 
-    recognition.onend = () => {
-        if (isRunning) {
-            setTimeout(() => recognition.start(), 100);
-        }
-    };
+            if (phase === 'REPEAT' || phase === 'WAITING_FOR_TAIL') {
+                targetWords.forEach((word) => {
+                    let isMatch = transcript.includes(word);
+                    if (word === "G" && (transcript.includes("GEE") || transcript.includes("GE"))) isMatch = true;
+                    if (word === "O" && (transcript.includes("OH") || transcript.includes("LOW"))) isMatch = true;
 
-    recognition.onresult = (event) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            transcript += event.results[i][0].transcript.toUpperCase();
-        }
-        
-        debugEl.innerHTML = `> ANALYZING: ${transcript}`;
+                    if (isMatch) {
+                        recognizedThisRound.add(word);
+                        document.querySelectorAll('.word-box').forEach(box => {
+                            const img = box.querySelector('img');
+                            if (img && img.alt === word) box.classList.add('recognized');
+                        });
+                    }
+                });
+            }
+        };
 
-        if (phase === 'REPEAT' || phase === 'WAITING_FOR_TAIL') {
-            targetWords.forEach((word) => {
-                // Fuzzy matching for single letters
-                let isMatch = transcript.includes(word);
-                if (word === "G" && (transcript.includes("GEE") || transcript.includes("GE"))) isMatch = true;
-                if (word === "O" && (transcript.includes("OH") || transcript.includes("LOW"))) isMatch = true;
+        recognition.onerror = (event) => {
+            debugEl.innerHTML = `> MIC ERROR: ${event.error}`;
+        };
 
-                if (isMatch) {
-                    recognizedThisRound.add(word);
-                    document.querySelectorAll('.word-box').forEach(box => {
-                        const img = box.querySelector('img');
-                        if (img && img.alt === word) box.classList.add('recognized');
-                    });
+        recognition.onend = () => {
+            if (isRunning) {
+                try {
+                    recognition.start();
+                } catch(e) {
+                    debugEl.innerHTML = `> Restarting mic...`;
                 }
-            });
-        }
-    };
+            }
+        };
+    }
 
     function playClick() {
         const osc = audioCtx.createOscillator();
@@ -240,7 +246,7 @@
         } else {
             statusEl.innerText = "FAILED";
             statusEl.classList.add('fail');
-            currentRound = 1; // Strict reset to round 1
+            currentRound = 1;
         }
 
         updateStats();
@@ -249,6 +255,7 @@
             isRunning = false;
             statusEl.innerText = "MISSION COMPLETE";
             gridEl.style.opacity = '0.2';
+            try { recognition.stop(); } catch(e) {}
         } else {
             phase = 'IDLE';
             setTimeout(startRound, 1500);
@@ -278,38 +285,26 @@
         }
     }
 
-    startBtn.onclick = async function() {
+    startBtn.onclick = function() {
+        if (!recognition) {
+            statusEl.innerText = "NO MIC SUPPORT";
+            return;
+        }
+
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         this.style.display = 'none';
         updateStats();
         
-        // Check if speech recognition is supported
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            statusEl.innerText = "MIC NOT SUPPORTED";
-            debugEl.innerHTML = `> Speech recognition not available on this browser`;
-            return;
-        }
-        
-        // For iOS/Safari: Request mic permission explicitly
-        try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
-            debugEl.innerHTML = `> Microphone access granted`;
-        } catch (err) {
-            statusEl.innerText = "MIC ACCESS DENIED";
-            debugEl.innerHTML = `> Please allow microphone access in settings`;
-            return;
-        }
-        
         try {
             recognition.start();
+            debugEl.innerHTML = `> Starting microphone...`;
         } catch (e) {
-            debugEl.innerHTML = `> Starting recognition...`;
+            debugEl.innerHTML = `> Microphone starting...`;
         }
         
-        recognition.onstart = () => {
-            debugEl.innerHTML = `> Recognition active`;
+        setTimeout(() => {
             startRound();
-        };
+        }, 500);
     };
 </script>
 
