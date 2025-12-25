@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GCXXXXX</title>
+    <style>
+        :root { --neon: #00ff41; --bg: #0a0a0a; --dim: #002200; }
+        body { 
+            background: var(--bg); color: var(--neon); font-family: 'Courier New', monospace; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            height: 100vh; margin: 0; overflow: hidden; 
+        }
+
+        #container { border: 2px solid var(--neon); padding: 20px; text-align: center; width: 580px; background: #000; box-shadow: 0 0 30px rgba(0,255,65,0.1); }
+
+        .word-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 25px 0; }
+        .word-box { 
+            padding: 10px; border: 1px solid var(--dim); 
+            opacity: 0.15; transition: all 0.05s; background: #ffffff;
+            display: flex; align-items: center; justify-content: center;
+            height: 80px;
+        }
+        .word-box img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .word-box.active-beat { opacity: 0.5; border-color: #fff; transform: scale(1.02); }
+        .word-box.recognized { opacity: 1; background: var(--neon); border-color: var(--neon); box-shadow: 0 0 15px var(--neon); }
+
+        .dot-row { margin-bottom: 20px; }
+        .dot { width: 10px; height: 10px; background: #222; border-radius: 50%; display: inline-block; margin: 0 8px; }
+        .dot.active { background: var(--neon); box-shadow: 0 0 8px var(--neon); }
+
+        #status { font-size: 1.5rem; height: 35px; margin-bottom: 10px; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; }
+        #stats { font-size: 0.9rem; margin-bottom: 10px; color: #888; }
+        
+        #debug-log { 
+            position: fixed; bottom: 0; left: 0; right: 0; height: 50px; 
+            background: #000; border-top: 1px solid #222; padding: 10px;
+            font-size: 0.7rem; color: #444; overflow: hidden;
+        }
+
+        button { background: var(--neon); color: #000; border: none; padding: 20px 60px; font-weight: bold; cursor: pointer; font-family: inherit; font-size: 1.2rem; }
+        .fail { color: #ff4444 !important; }
+        #coords { font-size: 0.9rem; color: #fff; background: #111; padding: 10px; border: 1px dashed var(--neon); margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <div id="stats">INITIALIZING...</div>
+    
+    <div class="word-grid" id="word-grid"></div>
+
+    <div class="dot-row">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+
+    <div id="status">PRESS START</div>
+    <div id="coords">COORDS: [ENCRYPTED]</div>
+    
+    <br>
+    <button id="start-btn">START SYSTEM</button>
+</div>
+
+<div id="debug-log">> System Awaiting Signal...</div>
+
+<script>
+    // IMAGE MAPPINGS
+    const IMAGE_MAP = {
+        "DOG": "dog.png",
+        "FROG": "frog.png",
+        "HOG": "hog.png",
+        "LOG": "log.png",
+        "SQUARE": "square.png",
+        "HAIR": "hair.png",
+        "CHAIR": "chair.png",
+        "BEAR": "bear.png",
+        "G": "g.png",
+        "O": "o.png",
+        "CASH": "cash.png",
+        "ING": "ing.png",
+        "IS": "is.png",
+        "THE": "the.png",
+        "BEST": "best.png",
+        "THING": "thing.png"
+    };
+
+    const BPM = 170;
+    const SEC_PER_BEAT = 60 / BPM;
+
+    // MASTER GAME DATA
+    const GAME_SEQUENCES = {
+        1: [
+            ["DOG", "DOG", "DOG", "DOG", "DOG", "DOG", "DOG", "DOG"],
+            ["DOG", "FROG", "DOG", "FROG", "DOG", "FROG", "DOG", "FROG"],
+            ["DOG", "HOG", "FROG", "HOG", "DOG", "FROG", "DOG", "HOG"],
+            ["LOG", "HOG", "FROG", "DOG", "LOG", "LOG", "FROG", "HOG"],
+            ["FROG", "LOG", "HOG", "HOG", "DOG", "LOG", "HOG", "FROG"]
+        ],
+        2: [
+            ["SQUARE", "SQUARE", "SQUARE", "SQUARE", "SQUARE", "SQUARE", "SQUARE", "SQUARE"],
+            ["SQUARE", "HAIR", "HAIR", "SQUARE", "SQUARE", "HAIR", "HAIR", "SQUARE"],
+            ["CHAIR", "SQUARE", "HAIR", "CHAIR", "SQUARE", "HAIR", "CHAIR", "CHAIR"],
+            ["BEAR", "CHAIR", "CHAIR", "SQUARE", "HAIR", "SQUARE", "BEAR", "SQUARE"],
+            ["BEAR", "CHAIR", "SQUARE", "HAIR", "CHAIR", "BEAR", "HAIR", "SQUARE"]
+        ],
+        3: [
+            ["G", "G", "G", "O", "G", "O", "O", "O"],
+            ["CASH", "CASH", "G", "G", "O", "O", "CASH", "CASH"],
+            ["G", "O", "CASH", "CASH", "G", "O", "CASH", "CASH"],
+            ["O", "G", "O", "CASH", "O", "G", "CASH", "G"],
+            ["G", "O", "CASH", "ING", "IS", "THE", "BEST", "THING"]
+        ]
+    };
+
+    let audioCtx, nextBeatTime, isRunning = false;
+    let currentSet = 1, currentRound = 1, beatCount = 0;
+    let phase = 'IDLE', targetWords = [];
+    let recognizedThisRound = new Set();
+
+    const statusEl = document.getElementById('status');
+    const debugEl = document.getElementById('debug-log');
+    const startBtn = document.getElementById('start-btn');
+    const gridEl = document.getElementById('word-grid');
+    const statsEl = document.getElementById('stats');
+
+    // SPEECH CONFIG
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript.toUpperCase();
+        }
+        
+        debugEl.innerHTML = `> ANALYZING: ${transcript}`;
+
+        if (phase === 'REPEAT' || phase === 'WAITING_FOR_TAIL') {
+            targetWords.forEach((word) => {
+                // Fuzzy matching for single letters
+                let isMatch = transcript.includes(word);
+                if (word === "G" && (transcript.includes("GEE") || transcript.includes("GE"))) isMatch = true;
+                if (word === "O" && (transcript.includes("OH") || transcript.includes("LOW"))) isMatch = true;
+
+                if (isMatch) {
+                    recognizedThisRound.add(word);
+                    document.querySelectorAll('.word-box').forEach(box => {
+                        const img = box.querySelector('img');
+                        if (img && img.alt === word) box.classList.add('recognized');
+                    });
+                }
+            });
+        }
+    };
+
+    function playClick() {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.setValueAtTime(beatCount === 0 ? 800 : 400, nextBeatTime);
+        gain.gain.setValueAtTime(0.05, nextBeatTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, nextBeatTime + 0.08);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(nextBeatTime); osc.stop(nextBeatTime + 0.08);
+    }
+
+    function scheduler() {
+        while (nextBeatTime < audioCtx.currentTime + 0.1) {
+            runBeat();
+            nextBeatTime += SEC_PER_BEAT;
+        }
+        if (isRunning) requestAnimationFrame(scheduler);
+    }
+
+    function runBeat() {
+        const dots = document.querySelectorAll('.dot');
+        const boxes = document.querySelectorAll('.word-box');
+        
+        dots.forEach((d, i) => d.classList.toggle('active', i === beatCount));
+        boxes.forEach((b, i) => b.classList.toggle('active-beat', i === beatCount));
+
+        playClick();
+
+        if (phase === 'PREVIEW') {
+            statusEl.innerText = "LISTEN";
+            statusEl.style.color = "var(--neon)";
+        } else if (phase === 'REPEAT') {
+            statusEl.innerText = "SAY IT!";
+            statusEl.style.color = "#fff";
+        }
+
+        beatCount++;
+        if (beatCount >= 8) {
+            beatCount = 0;
+            if (phase === 'PREVIEW') {
+                phase = 'REPEAT';
+                recognizedThisRound.clear();
+            } else if (phase === 'REPEAT') {
+                phase = 'WAITING_FOR_TAIL';
+                statusEl.innerText = "...";
+                setTimeout(validate, 1200); 
+            }
+        }
+    }
+
+    function validate() {
+        const uniqueTargets = [...new Set(targetWords)];
+        const success = uniqueTargets.every(word => recognizedThisRound.has(word));
+
+        if (success) {
+            statusEl.innerText = "SYNCED";
+            currentRound++;
+            if (currentRound > 5) {
+                currentRound = 1;
+                unlockCoords();
+                currentSet++;
+            }
+        } else {
+            statusEl.innerText = "FAILED";
+            statusEl.classList.add('fail');
+            currentRound = 1; // Strict reset to round 1
+        }
+
+        updateStats();
+
+        if (currentSet > 3) {
+            isRunning = false;
+            statusEl.innerText = "MISSION COMPLETE";
+            gridEl.style.opacity = '0.2';
+        } else {
+            phase = 'IDLE';
+            setTimeout(startRound, 1500);
+        }
+    }
+
+    function updateStats() {
+        statsEl.innerText = `SET ${currentSet}/3 | ROUND ${currentRound}/5`;
+    }
+
+    function unlockCoords() {
+        const c = ["N 37 _4.__2 W 1__ 0_._1_", "N 37 24.1_2 W 1_2 03._1_", "N 37 24.122 W 122 03.712"];
+        document.getElementById('coords').innerText = "COORDS: " + c[currentSet - 1];
+    }
+
+    function startRound() {
+        targetWords = GAME_SEQUENCES[currentSet][currentRound - 1];
+        gridEl.innerHTML = targetWords.map(w => `<div class="word-box"><img src="${IMAGE_MAP[w]}" alt="${w}"></div>`).join('');
+        
+        beatCount = 0;
+        phase = 'PREVIEW';
+        statusEl.classList.remove('fail');
+        nextBeatTime = audioCtx.currentTime + 0.3;
+        if (!isRunning) {
+            isRunning = true;
+            scheduler();
+        }
+    }
+
+    startBtn.onclick = function() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this.style.display = 'none';
+        recognition.start();
+        updateStats();
+        recognition.onstart = () => startRound();
+    };
+</script>
+
+</body>
+</html>
