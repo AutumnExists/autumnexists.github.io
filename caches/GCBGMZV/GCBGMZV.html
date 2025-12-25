@@ -148,7 +148,7 @@
                 transcript += event.results[i][0].transcript.toUpperCase();
             }
             
-            debugEl.innerHTML = `> ANALYZING: ${transcript}`;
+            debugEl.innerHTML = `> HEARD: ${transcript}`;
 
             if (phase === 'REPEAT' || phase === 'WAITING_FOR_TAIL') {
                 targetWords.forEach((word) => {
@@ -158,6 +158,7 @@
 
                     if (isMatch) {
                         recognizedThisRound.add(word);
+                        debugEl.innerHTML = `> MATCHED: ${word} | Total: ${recognizedThisRound.size}`;
                         document.querySelectorAll('.word-box').forEach(box => {
                             const img = box.querySelector('img');
                             if (img && img.alt === word) box.classList.add('recognized');
@@ -276,43 +277,65 @@
     }
 
     function startRound() {
+        debugEl.innerHTML = `> Loading round ${currentRound}...`;
         targetWords = GAME_SEQUENCES[currentSet][currentRound - 1];
         gridEl.innerHTML = targetWords.map(w => `<div class="word-box"><img src="${IMAGE_MAP[w]}" alt="${w}"></div>`).join('');
         
         beatCount = 0;
         phase = 'PREVIEW';
         statusEl.classList.remove('fail');
+        
+        if (!audioCtx) {
+            debugEl.innerHTML = `> ERROR: No audio context!`;
+            return;
+        }
+        
         nextBeatTime = audioCtx.currentTime + 0.3;
+        debugEl.innerHTML = `> Beat starting at ${nextBeatTime}`;
+        
         if (!isRunning) {
             isRunning = true;
             scheduler();
+            debugEl.innerHTML = `> Scheduler started`;
         }
     }
 
     startBtn.onclick = function() {
+        debugEl.innerHTML = `> Button clicked...`;
+        
         if (!recognition) {
             statusEl.innerText = "NO MIC SUPPORT";
+            debugEl.innerHTML = `> Speech recognition not available`;
             return;
         }
 
+        // Create audio context and resume it (important for mobile)
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        debugEl.innerHTML = `> Audio context created, state: ${audioCtx.state}`;
+        
+        // Resume audio context if suspended (common on mobile)
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().then(() => {
+                debugEl.innerHTML = `> Audio resumed`;
+            });
+        }
+        
         this.style.display = 'none';
         updateStats();
         
+        // Start recognition
         try {
             recognition.start();
-            debugEl.innerHTML = `> Starting microphone...`;
-            // Start the game immediately
-            setTimeout(() => {
-                startRound();
-            }, 300);
+            debugEl.innerHTML = `> Microphone starting...`;
         } catch (e) {
-            debugEl.innerHTML = `> Error: ${e.message}`;
-            // Try to start anyway
-            setTimeout(() => {
-                startRound();
-            }, 300);
+            debugEl.innerHTML = `> Mic error: ${e.message}`;
         }
+        
+        // Start the game
+        setTimeout(() => {
+            debugEl.innerHTML = `> Starting game...`;
+            startRound();
+        }, 500);
     };
 </script>
 
