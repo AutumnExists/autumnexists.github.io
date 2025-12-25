@@ -43,7 +43,8 @@
             font-size: 0.7rem; color: #444; overflow: hidden;
         }
 
-        button { background: var(--neon); color: #000; border: none; padding: 20px 60px; font-weight: bold; cursor: pointer; font-family: inherit; font-size: 1.2rem; }
+        button { background: var(--neon); color: #000; border: none; padding: 20px 60px; font-weight: bold; cursor: pointer; font-family: inherit; font-size: 1.2rem; margin: 5px; }
+        #mic-test-btn { padding: 10px 30px; font-size: 0.9rem; }
         .fail { color: #ff4444 !important; }
         #coords { font-size: 0.9rem; color: #fff; background: #111; padding: 10px; border: 1px dashed var(--neon); margin-top: 10px; }
     </style>
@@ -311,21 +312,24 @@
             return;
         }
 
-        // Show mic test button
+        this.style.display = 'none';
+        
+        // Show and setup mic test button
         micTestBtn.style.display = 'inline-block';
         micTestBtn.onclick = function() {
+            debugEl.innerHTML = `> Testing microphone...`;
             try {
                 recognition.stop();
-                recognition.start();
-                debugEl.innerHTML = `> Restarting microphone... say "TEST"`;
-            } catch(e) {
+            } catch(e) {}
+            
+            setTimeout(() => {
                 try {
                     recognition.start();
-                    debugEl.innerHTML = `> Starting microphone... say "TEST"`;
-                } catch(e2) {
-                    debugEl.innerHTML = `> Error: ${e2.message}`;
+                    debugEl.innerHTML = `> Mic active - SAY "TEST" NOW`;
+                } catch(e) {
+                    debugEl.innerHTML = `> Cannot start mic: ${e.message}`;
                 }
-            }
+            }, 100);
         };
 
         // Create audio context and resume it (important for mobile)
@@ -335,24 +339,25 @@
         // Resume audio context if suspended (common on mobile)
         if (audioCtx.state === 'suspended') {
             audioCtx.resume().then(() => {
-                debugEl.innerHTML = `> Audio resumed`;
+                debugEl.innerHTML = `> Audio resumed - Click TEST MIC`;
             });
+        } else {
+            debugEl.innerHTML = `> Ready - Click TEST MICROPHONE button`;
         }
         
-        this.style.display = 'none';
         updateStats();
         
         // Start recognition
         try {
             recognition.start();
-            debugEl.innerHTML = `> Microphone starting... (may take a moment)`;
+            debugEl.innerHTML = `> Microphone starting... Click TEST MIC if needed`;
         } catch (e) {
-            debugEl.innerHTML = `> Mic error: ${e.message} - Try TEST MIC button`;
+            debugEl.innerHTML = `> Mic error: ${e.message} - Click TEST MIC`;
         }
         
         // Start the game
         setTimeout(() => {
-            debugEl.innerHTML = `> Starting game... speak during "SAY IT!" phase`;
+            debugEl.innerHTML = `> Game starting... Click TEST MIC if mic not working`;
             startRound();
         }, 500);
     };
