@@ -106,6 +106,8 @@
     };
 
     const BPM = 170;
+    const SLOW_BPM = 155;
+    let currentBPM = BPM;
     const SEC_PER_BEAT = 60 / BPM;
 
     // MASTER GAME DATA
@@ -137,6 +139,7 @@
     let currentSet = 1, currentRound = 1, beatCount = 0;
     let phase = 'IDLE', targetWords = [];
     let recognizedThisRound = new Set();
+    let failCount = 0;
     let recognition = null;
 
     const statusEl = document.getElementById('status');
@@ -223,9 +226,10 @@
     }
 
     function scheduler() {
+        const secPerBeat = 60 / currentBPM;
         while (nextBeatTime < audioCtx.currentTime + 0.1) {
             runBeat();
-            nextBeatTime += SEC_PER_BEAT;
+            nextBeatTime += secPerBeat;
         }
         if (isRunning) requestAnimationFrame(scheduler);
     }
@@ -267,6 +271,8 @@
 
         if (success) {
             statusEl.innerText = "SYNCED";
+            failCount = 0; // Reset fail count on success
+            currentBPM = BPM; // Reset to normal speed
             currentRound++;
             if (currentRound > 5) {
                 currentRound = 1;
@@ -276,6 +282,14 @@
         } else {
             statusEl.innerText = "FAILED";
             statusEl.classList.add('fail');
+            failCount++;
+            
+            // Slow down after 3 consecutive failures
+            if (failCount >= 3) {
+                currentBPM = SLOW_BPM;
+                debugEl.innerHTML = `> Speed reduced to ${SLOW_BPM} BPM`;
+            }
+            
             currentRound = 1;
         }
 
