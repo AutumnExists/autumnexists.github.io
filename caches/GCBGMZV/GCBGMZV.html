@@ -132,6 +132,23 @@
     const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    // Handle recognition errors and restarts
+    recognition.onerror = (event) => {
+        debugEl.innerHTML = `> ERROR: ${event.error}`;
+        if (event.error === 'no-speech' || event.error === 'audio-capture') {
+            if (isRunning) {
+                setTimeout(() => recognition.start(), 100);
+            }
+        }
+    };
+
+    recognition.onend = () => {
+        if (isRunning) {
+            setTimeout(() => recognition.start(), 100);
+        }
+    };
 
     recognition.onresult = (event) => {
         let transcript = "";
@@ -261,15 +278,40 @@
         }
     }
 
-    startBtn.onclick = function() {
+    startBtn.onclick = async function() {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         this.style.display = 'none';
-        recognition.start();
         updateStats();
-        recognition.onstart = () => startRound();
+        
+        // Check if speech recognition is supported
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            statusEl.innerText = "MIC NOT SUPPORTED";
+            debugEl.innerHTML = `> Speech recognition not available on this browser`;
+            return;
+        }
+        
+        // For iOS/Safari: Request mic permission explicitly
+        try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+            debugEl.innerHTML = `> Microphone access granted`;
+        } catch (err) {
+            statusEl.innerText = "MIC ACCESS DENIED";
+            debugEl.innerHTML = `> Please allow microphone access in settings`;
+            return;
+        }
+        
+        try {
+            recognition.start();
+        } catch (e) {
+            debugEl.innerHTML = `> Starting recognition...`;
+        }
+        
+        recognition.onstart = () => {
+            debugEl.innerHTML = `> Recognition active`;
+            startRound();
+        };
     };
 </script>
 
 </body>
-
 </html>
