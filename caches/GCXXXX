@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mystery Cache</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'Courier New', monospace; height: 100vh; position: relative; background: #000;}
+        .curtain { position: fixed; top: 0; width: 50%; height: 100%; background: #000; z-index: 100; transition: transform 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+        .curtain-left { left: 0; border-right: 1px solid #222; }
+        .curtain-right { right: 0; border-left: 1px solid #222; }
+        .curtain.open-left { transform: translateX(-100%); }
+        .curtain.open-right { transform: translateX(100%); }
+        .background { width: 100%; height: 100vh; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); display: flex; align-items: center; justify-content: center; }
+        .coordinates { font-size: 3rem; color: #00ff41; text-shadow: 0 0 20px rgba(0,255,65,0.5); opacity: 0; transition: opacity 2s ease-in; }
+        .coordinates.visible { opacity: 1; }
+        .confetti { position: fixed; width: 10px; height: 10px; top: -10px; z-index: 50; animation: fall linear forwards; }
+        @keyframes fall { to { transform: translateY(100vh) rotate(360deg); } }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <script>
+        // Obfuscation helper: Simple XOR cipher
+        const _decrypt = (str, key) => {
+            return str.split('').map((char, i) => 
+                String.fromCharCode(char.charCodeAt(0) ^ key.charCodeAt(i % key.length))
+            ).join('');
+        };
+
+        // Encrypted data (Previously 'opensesame' and your coordinates)
+        const _k = "cache"; 
+        const _p = "\x0c\x11\x06\x0b\x1a\x06\x10\x00\x0e\x00"; // 'opensesame' encrypted
+        const _c = "\x07\x7a\x14\x45\x40\x77\x11\x4b\x75\x41\x15\x4b\x10\x40\x43\x45\x46\x17\x00\x1a\x77\x18\x73\x71\x76\x77\x76"; // coordinates encrypted
+
+        let typedText = '';
+        let isOpened = false;
+
+        document.addEventListener('keydown', (e) => {
+            if (isOpened) return;
+            
+            if (e.key.length === 1) {
+                typedText += e.key.toLowerCase();
+                if (typedText.length > 20) typedText = typedText.slice(-20);
+                
+                // Compare typed text against decrypted secret phrase
+                if (typedText.includes(_decrypt(_p, _k))) {
+                    openCurtains();
+                }
+            }
+        });
+
+        function openCurtains() {
+            isOpened = true;
+            
+            const sound = document.getElementById('brickSound');
+            sound.play().catch(e => console.log('Audio ready'));
+            
+            document.getElementById('curtainLeft').classList.add('open-left');
+            document.getElementById('curtainRight').classList.add('open-right');
+            
+            const bg = document.getElementById('background');
+            const coordDisplay = document.getElementById('coords');
+            
+            bg.classList.remove('hidden');
+            // Decrypt coordinates only when successfully opened
+            coordDisplay.textContent = _decrypt(_c, _k);
+            
+            setTimeout(() => {
+                coordDisplay.classList.add('visible');
+                createConfetti();
+            }, 1500);
+        }
+
+        function createConfetti() {
+            const colors = ['#00ff41', '#008f11', '#003b00', '#ffffff'];
+            for (let i = 0; i < 100; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                    document.body.appendChild(confetti);
+                    setTimeout(() => confetti.remove(), 5000);
+                }, i * 30);
+            }
+        }
+    </script>
+
+    <div class="curtain curtain-left" id="curtainLeft"></div>
+    <div class="curtain curtain-right" id="curtainRight"></div>
+    
+    <div class="background hidden" id="background">
+        <div class="coordinates" id="coords"></div>
+    </div>
